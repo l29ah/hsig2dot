@@ -3,6 +3,7 @@ import Data.IntSet (IntSet)
 import qualified Data.IntSet as IS
 import Numeric
 import Data.Char (isSpace)
+import Data.List
 
 data Key = Key {
 	kid :: KeyID,
@@ -50,21 +51,25 @@ pSubBlocks = do
 pUIDBlock :: GenParser Char st (UID, [(Int, Bool, KeyID)])
 pUIDBlock = do
 	uid <- pUIDLine
-	many pRevLine
 	sl <- many (try $ do
-		s <- pSigLine
-		many pRevLine
-		return s)
-	return (uid, sl)
+		(l, k) <- pSigLine
+		r <- many pRevLine
+		return ((l, False, k), r))
+	return (uid, revoke (reverse sl) [])
+	where	revoke [] _ = []
+		revoke ((s@(l, r, k), rl):xs) revlist = 
+			let	nrl = revlist ++ rl
+				(rrl, ns) = if k `elem` nrl then (delete k nrl, (l, True, k)) else (nrl, s) in
+			ns : revoke xs rrl
 
-pSigLine :: GenParser Char st (Int, Bool, KeyID)
+pSigLine :: GenParser Char st (Int, KeyID)
 pSigLine = do
 	string "sig"
 	anyChar
 	l <- anyChar
 	anyChar
 	anyChar
-	r <- anyChar
+	anyChar
 	anyChar
 	anyChar
 	anyChar
@@ -76,7 +81,7 @@ pSigLine = do
 	space
 	space
 	u <- pUID
-	return (if l == ' ' then 0 else read [l], if r == 'R' then True else False, k)
+	return (if l == ' ' then 0 else read [l], k)
 
 pUIDLine :: GenParser Char st UID
 pUIDLine = do
@@ -115,11 +120,13 @@ pPubLine = do
 
 pKey = many hexDigit
 
-pRevLine :: GenParser Char st ()
+pRevLine :: GenParser Char st KeyID
 pRevLine = do
 	string "rev"
+	spaces
+	k <- pKey
 	manyTill anyChar newline
-	return ()
+	return k
 
 pDate :: GenParser Char st ()
 pDate = (many1 $ choice [char '-', digit]) >> return ()
@@ -132,9 +139,9 @@ drawKey :: Key -> String
 drawKey k = "\"" ++ (kid k) ++ "\" [label=\"" ++ (trim $ takeWhile (/= '<') $ head $ kuids k) ++ "\"]\n"
 
 drawSig :: Signature -> String
-drawSig s = "{ " ++ show (skey s) ++ " } -> \"" ++ (tkey s) ++ "\" [color=\"" ++ color ++ "\",penwidth=\"" ++ (show (1 + level s)) ++ "\"]\n"
+drawSig s = "{ " ++ show (skey s) ++ " } -> \"" ++ (tkey s) ++ "\" [color=\"" ++ color ++ "\",penwidth=\"" ++ (show (if srevoked s then 3 else 1 + level s)) ++ "\"]\n"
 
-	where	color = case level s of
+	where	color = if srevoked s then "red" else case level s of
 				0 -> "black"
 				1 -> "grey"
 				2 -> "blue"

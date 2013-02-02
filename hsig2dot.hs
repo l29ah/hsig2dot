@@ -139,13 +139,19 @@ drawKey :: Key -> String
 drawKey k = "\"" ++ (kid k) ++ "\" [label=\"" ++ (trim $ takeWhile (/= '<') $ head $ kuids k) ++ "\"]\n"
 
 drawSig :: Signature -> String
-drawSig s = "{ " ++ show (skey s) ++ " } -> \"" ++ (tkey s) ++ "\" [color=\"" ++ color ++ "\",penwidth=\"" ++ (show (if srevoked s then 3 else 1 + level s)) ++ "\"]\n"
+drawSig s = "{ " ++ show (skey s) ++ " } -> \"" ++ (tkey s) ++ "\" [color=\"" ++ color ++ "\",penwidth=\"" ++ (show (if srevoked s then 3 else 1 + level s)) ++ "\",weight=\"" ++ show weight ++ "\",arrowhead=empty]\n"
 
 	where	color = if srevoked s then "red" else case level s of
 				0 -> "black"
 				1 -> "grey"
 				2 -> "blue"
 				3 -> "green"
+		weight = if srevoked s then 0 else case level s of
+			1 -> 1
+			2 -> 2
+			0 -> 3
+			3 -> 4
+
 filterKeys :: [Key] -> [Key]
 filterKeys = filter (\k -> and [
 			not $ krevoked k,

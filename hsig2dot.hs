@@ -1,3 +1,4 @@
+import Control.Monad
 import Text.ParserCombinators.Parsec
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IS
@@ -30,7 +31,7 @@ pAll = do
 	manyTill anyChar newline
 	b <- many $ try pKeyBlock
 	eof
-	return (map fst b, concat $ map snd b)
+	return (map fst b, concatMap snd b)
 
 pKeyBlock :: GenParser Char st (Key, [Signature])
 pKeyBlock = do
@@ -87,11 +88,10 @@ pUIDLine :: GenParser Char st UID
 pUIDLine = do
 	string "uid"
 	spaces
-	uid <- manyTill anyChar newline
-	return uid
+	manyTill anyChar newline
 
 pUID :: GenParser Char st (Maybe UID)
-pUID = choice [string "[User ID not found]" >> newline >> return Nothing, manyTill anyChar newline >>= return . Just]
+pUID = choice [string "[User ID not found]" >> newline >> return Nothing, liftM Just $ manyTill anyChar newline]
 
 
 pPubLine :: GenParser Char st (KeyID, Bool, Bool)
@@ -129,7 +129,7 @@ pRevLine = do
 	return k
 
 pDate :: GenParser Char st ()
-pDate = (many1 $ choice [char '-', digit]) >> return ()
+pDate = void $ many1 $ choice [char '-', digit]
 
 trim :: String -> String
 trim      = f . f
@@ -176,6 +176,6 @@ main = do
 	putStrLn "splines=true"
 	putStrLn "sep=.1"
 	let keys = filterKeys ks
-	putStr $ concatMap drawKey $ keys
+	putStr $ concatMap drawKey keys
 	putStr $ concatMap drawSig $ filterSigs keys ss
 	putStrLn "}"

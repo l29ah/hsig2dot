@@ -1,10 +1,11 @@
 import Control.Monad
-import Text.ParserCombinators.Parsec
+import Data.Char (isSpace)
+import Data.Either
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IS
-import Numeric
-import Data.Char (isSpace)
 import Data.List
+import Numeric
+import Text.ParserCombinators.Parsec
 
 data Key = Key {
 	kid :: KeyID,
@@ -36,7 +37,9 @@ pAll = do
 pKeyBlock :: GenParser Char st (Key, [Signature])
 pKeyBlock = do
 	(kid, kr, ke) <- pPubLine
+	optional pFingerprint
 	optional pRevLine
+	optional pRevReason
 	uids <- many $ try pUIDBlock
 	optional pSubBlocks
 	newline
@@ -98,8 +101,8 @@ pPubLine :: GenParser Char st (KeyID, Bool, Bool)
 pPubLine = do
 	string "pub"
 	spaces
+	skipMany lower
 	skipMany digit
-	upper
 	char '/'
 	k <- pKey
 	space
@@ -113,12 +116,14 @@ pPubLine = do
 		manyTill anyChar $ char ']'
 		return True
 	optional $ do
-		string " [expires: "
+		string " ["
 		manyTill anyChar $ char ']'
 	newline
 	return (k, r, e)
 
-pKey = many hexDigit
+pKey = do
+	optional $ string "0x"
+	many hexDigit
 
 pRevLine :: GenParser Char st KeyID
 pRevLine = do
@@ -127,6 +132,16 @@ pRevLine = do
 	k <- pKey
 	manyTill anyChar newline
 	return k
+
+pRevReason = do
+	spaces
+	string "reason for revocation: "
+	manyTill anyChar newline
+
+pFingerprint = do
+	spaces
+	string "Key fingerprint = "
+	manyTill anyChar newline
 
 pDate :: GenParser Char st ()
 pDate = void $ many1 $ choice [char '-', digit]
@@ -170,7 +185,9 @@ filterSigs keys sigs = let ks = IS.fromList $ map (fst . head . readHex . kid) k
 
 main = do
 	stdin <- getContents
-	let Right (ks, ss) = parse pAll "" stdin
+	either print draw $ parse pAll "" stdin
+
+draw (ks, ss) = do
 	putStrLn "digraph \"Keyring Statistics\" {"
 	putStrLn "overlap=scale"
 	putStrLn "splines=true"
